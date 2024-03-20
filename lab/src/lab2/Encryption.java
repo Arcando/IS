@@ -9,18 +9,13 @@ public class Encryption {
     private static final int BLOCK_SIZE = 8; // Размер блока в байтах (64 бита)
 
     public static void main(String[] args) {
-        // Проверка наличия аргументов командной строки
-        if (args.length < 2) {
-            System.out.println("Usage: java Encryption <input_file> <output_file>");
-            System.exit(1);
-        }
 
         // Имена файлов
-        String inputFileName = args[0];
-        String outputFileName = args[1];
+        String inputFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\message.txt";
+        String outputFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\messageEncrypt.txt";
 
-        String keyFileName = "key.txt"; // Имя файла для хранения ключа
-        String ivFileName = "iv.txt";   // Имя файла для хранения IV
+        String keyFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\key.txt"; // Имя файла для хранения ключа
+        String ivFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\message.txt";   // Имя файла для хранения IV
 
         try {
             // Генерация ключа и IV

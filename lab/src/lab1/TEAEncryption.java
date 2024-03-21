@@ -7,40 +7,45 @@ import java.security.SecureRandom;
 import java.util.Scanner;
 
 public class TEAEncryption {
-    private static final int DELTA = 0x9e3779b9;//
-    private static final int NUM_ROUNDS = 32;//
-    private static final int BLOCK_SIZE = 8; // 64 bits
+    // Константа DELTA для TEA
+    private static final int DELTA = 0x9e3779b9;
+    // Количество раундов для TEA
+    private static final int NUM_ROUNDS = 32;
+    // Размер блока данных для TEA (в байтах)
+    private static final int BLOCK_SIZE = 8; // 64 бита
 
     /**
-     * Открывается файл и заполняется псевдослучайными числами до 16 байт
+     * Генерация ключа шифрования и запись в файл
      *
-     * @param keyFileName
-     * @throws IOException
+     * @param keyFileName Имя файла для хранения ключа
+     * @throws IOException Ошибка ввода/вывода
      */
     private static void generateKey(String keyFileName) throws IOException {
         try (FileOutputStream outputStream = new FileOutputStream(keyFileName)) {
             SecureRandom secureRandom = new SecureRandom();
+            // Генерация ключа длиной 16 байт
             byte[] key = new byte[BLOCK_SIZE * 2];
             secureRandom.nextBytes(key);
             outputStream.write(key);
         }
     }
 
-
     /**
-     * Считывается ключ из файла, если размер не равен 16 байт, пробрасывается IllegalArgumentException
+     * Чтение ключа из файла
      *
-     * @param keyFileName
-     * @return
-     * @throws IOException
+     * @param keyFileName Имя файла с ключом
+     * @return Массив int, содержащий ключ
+     * @throws IOException Ошибка ввода/вывода
      */
     private static int[] readKey(String keyFileName) throws IOException {
         try (FileInputStream inputStream = new FileInputStream(keyFileName)) {
             byte[] keyBytes = inputStream.readAllBytes();
+            // Проверка длины ключа
             if (keyBytes.length % 4 != 0) {
-                throw new IllegalArgumentException("Не валидная длина ключа");
+                throw new IllegalArgumentException("Некорректная длина ключа");
             }
             int[] key = new int[keyBytes.length / 4];
+            // Преобразование массива байт в массив int
             for (int i = 0; i < keyBytes.length / 4; i++) {
                 int value = 0;
                 for (int j = 0; j < 4; j++) {
@@ -52,12 +57,12 @@ public class TEAEncryption {
         }
     }
 
-
     /**
-     * Сообщение кодируется с использованием ключа
-     * @param message
-     * @param key
-     * @return
+     * Шифрование данных методом TEA
+     *
+     * @param message Исходный блок данных
+     * @param key     Ключ шифрования
+     * @return Зашифрованный блок данных
      */
     private static byte[] teaEncrypt(byte[] message, int[] key) {
         int[] v = new int[2];
@@ -83,12 +88,51 @@ public class TEAEncryption {
         return result;
     }
 
+    /**
+     * Шифрование файла
+     *
+     * @param inputFileName  Входной файл для шифрования
+     * @param outputFileName Выходной файл с зашифрованными данными
+     * @param keyFileName    Файл с ключом шифрования
+     * @throws IOException Ошибка ввода/вывода
+     */
+    private static void encryptFile(String inputFileName, String outputFileName, String keyFileName) throws IOException {
+        int[] key = readKey(keyFileName);
+
+        try (FileInputStream inputStream = new FileInputStream(inputFileName);
+             FileOutputStream outputStream = new FileOutputStream(outputFileName)) {
+            byte[] inputBytes = inputStream.readAllBytes();
+            if (inputBytes.length != BLOCK_SIZE) {
+                throw new ArrayIndexOutOfBoundsException("Размер блока данных должен быть равен " + BLOCK_SIZE + " байт");
+            }
+            byte[] encryptedBytes = teaEncrypt(inputBytes, key);
+            outputStream.write(encryptedBytes);
+        }
+    }
 
     /**
-     * Сообщение декодируется с использованием ключа
-     * @param cipher
-     * @param key
-     * @return
+     * Дешифрование файла
+     *
+     * @param inputFileName Имя зашифрованного файла
+     * @param keyFileName   Файл с ключом шифрования
+     * @throws IOException Ошибка ввода/вывода
+     */
+    private static void decryptFile(String inputFileName, String keyFileName) throws IOException {
+        int[] key = readKey(keyFileName);
+        try (FileInputStream inputStream = new FileInputStream(inputFileName);
+             FileOutputStream outputStream = new FileOutputStream(inputFileName.replace(".txt.enc", "decrypt.txt"))) {
+            byte[] encryptedBytes = inputStream.readAllBytes();
+            byte[] decryptedBytes = teaDecrypt(encryptedBytes, key);
+            outputStream.write(decryptedBytes);
+        }
+    }
+
+    /**
+     * Дешифрование данных методом TEA
+     *
+     * @param cipher Зашифрованный блок данных
+     * @param key    Ключ шифрования
+     * @return Расшифрованный блок данных
      */
     private static byte[] teaDecrypt(byte[] cipher, int[] key) {
         int[] v = new int[2];
@@ -114,60 +158,31 @@ public class TEAEncryption {
         return result;
     }
 
-    /**
-     * Происходит шифрование внутри файла, с использованием метода teaEncrypt
-     * @param inputFileName
-     * @param outputFileName
-     * @param keyFileName
-     * @throws IOException
-     */
-    private static void mkd_encryptFile(String inputFileName, String outputFileName, String keyFileName) throws IOException {
-        int[] key = readKey(keyFileName);
-
-        try (FileInputStream inputStream = new FileInputStream(inputFileName);
-             FileOutputStream outputStream = new FileOutputStream(outputFileName)) {
-            byte[] inputBytes = inputStream.readAllBytes();
-            if (inputBytes.length != 8) {
-                throw new ArrayIndexOutOfBoundsException("Тело сообщения должно равняться 8 байт");
-            }
-            byte[] encryptedBytes = teaEncrypt(inputBytes, key);
-            outputStream.write(encryptedBytes);
-        }
-    }
-
-    /**
-     * Происходит дешифрование внутри файла, с использованием метода teaDecrypt
-     * @param inputFileName
-     * @param keyFileName
-     * @throws IOException
-     */
-    private static void mkd_decryptFile(String inputFileName, String keyFileName) throws IOException {
-        int[] key = readKey(keyFileName);
-        try (FileInputStream inputStream = new FileInputStream(inputFileName);
-             FileOutputStream outputStream = new FileOutputStream(inputFileName.replace(".txt.enc", "decrypt.txt"))) {
-            byte[] encryptedBytes = inputStream.readAllBytes();
-            byte[] decryptedBytes = teaDecrypt(encryptedBytes, key);
-            outputStream.write(decryptedBytes);
-        }
-    }
-
     public static void main(String[] args) throws IOException {
-        String messageFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР1\\message.txt";//путь к файлу с сообщением для шифрования
-        String keyFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР1\\key.txt";//путь к файлу с ключем для шифрования
+        // Пути к файлам
+        String messageFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР1\\message.txt"; // Путь к файлу с сообщением для шифрования
+        String keyFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР1\\key.txt"; // Путь к файлу с ключем для шифрования
 
-        Scanner scanner = new Scanner(System.in);//считываем строку с конлоси
-        System.out.println("Ввдите тип опперации: -e - шифрование, -d - дешифрование");
+        // Ввод режима работы (шифрование или дешифрование) с консоли
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Введите тип операции: -e - шифрование, -d - дешифрование");
         String mode = scanner.nextLine();
 
         if (mode.equalsIgnoreCase("-e")) {
+            // Генерация ключа шифрования
             generateKey(keyFileName);
-            mkd_encryptFile(messageFileName, messageFileName + ".enc", keyFileName);
+            // Шифрование файла
+            encryptFile(messageFileName, messageFileName + ".enc", keyFileName);
             System.out.println("Шифрование завершено.");
         } else if (mode.equalsIgnoreCase("-d")) {
-            mkd_decryptFile(messageFileName + ".enc", keyFileName);
+            // Дешифрование файла
+            decryptFile(messageFileName + ".enc", keyFileName);
             System.out.println("Дешифрование завершено.");
-        } else throw new IOException();
-
+        }
+        else {
+            // Некорректный режим работы
+            throw new IOException("Некорректный режим работы.");
+        }
     }
-
 }
+

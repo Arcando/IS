@@ -2,29 +2,7 @@ package lab2;
 
 import java.io.*;
 import java.security.SecureRandom;
-
-import java.io.*;
-import java.security.SecureRandom;
-import java.util.Scanner;
-
-import java.io.*;
-import java.security.SecureRandom;
-import java.util.Scanner;
-
-import java.io.*;
-import java.security.SecureRandom;
-import java.util.Scanner;
-
-import java.io.*;
-import java.security.SecureRandom;
-import java.util.Scanner;
-
-import java.io.*;
-import java.security.SecureRandom;
-import java.util.Scanner;
-
-import java.io.*;
-import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Scanner;
 
 public class Encryption {
@@ -33,20 +11,21 @@ public class Encryption {
     private static final int BLOCK_SIZE = 8; // Размер блока в байтах (64 бита)
 
     public static void main(String[] args) {
-
         Scanner scanner = new Scanner(System.in);
-        System.out.println("Введите мод: -e - шифрование, -d - дешифрование");
 
+        System.out.println("Введите мод: -e - шифрование, -d - дешифрование");
         String mode = scanner.nextLine();
-        String inputFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\key.txt";
-        String keyFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\message.txt";
+        System.out.println("Введите название файла:");
+
+        String inputFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\" + scanner.nextLine();
+        String keyFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\key.txt";
 
         if ("-e".equals(mode)) {
             encrypt(inputFileName, keyFileName);
         } else if ("-d".equals(mode)) {
             decrypt(inputFileName, keyFileName);
         } else {
-            System.out.println("Invalid mode. Use -e for encryption or -d for decryption.");
+            System.out.println("Неверный режим. Используйте -e для шифрования или -d для дешифрования.");
         }
     }
 
@@ -80,40 +59,82 @@ public class Encryption {
                 }
             }
 
-            System.out.println("Encryption successful.");
+            System.out.println("Шифрование завершено.");
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     private static void decrypt(String inputFileName, String keyFileName) {
-        String outputFileName = inputFileName.substring(0, inputFileName.lastIndexOf(".enc"));
+        String outputFileName = inputFileName.replace(".enc", "_decrypted.txt");
+        String ivFileName = inputFileName.replace(".enc", ".iv");
 
         try {
-            String ivFileName = inputFileName + ".iv";
             int[] key = readKey(keyFileName);
             byte[] iv = readIV(ivFileName);
 
-            try (FileInputStream inputStream = new FileInputStream(inputFileName);
-                 FileOutputStream outputStream = new FileOutputStream(outputFileName)) {
-                byte[] inputBytes = new byte[BLOCK_SIZE];
-                byte[] outputBytes = new byte[BLOCK_SIZE];
-                int bytesRead;
-
-                while ((bytesRead = inputStream.read(inputBytes)) != -1) {
-                    byte[] decryptedBlock = teaEncrypt(inputBytes, key);
-                    for (int i = 0; i < bytesRead; i++) {
-                        outputBytes[i] = (byte) (decryptedBlock[i] ^ iv[i]);
-                    }
-                    outputStream.write(outputBytes);
-                    iv = inputBytes;
-                }
+            if (iv == null || iv.length != BLOCK_SIZE) {
+                System.err.println("Ошибка: IV не найден или имеет неправильный формат.");
+                return;
             }
 
-            System.out.println("Decryption successful.");
+            try (FileInputStream inputStream = new FileInputStream(inputFileName);
+                 FileOutputStream outputStream = new FileOutputStream(outputFileName)) {
+                byte[] inputBytes = inputStream.readAllBytes();
+
+                byte[] outputBytes = new byte[inputBytes.length];
+                int blockSize = BLOCK_SIZE;
+
+                // Дешифруем каждый блок
+                for (int i = 0; i < inputBytes.length; i += blockSize) {
+                    byte[] encryptedBlock = Arrays.copyOfRange(inputBytes, i, i + blockSize);
+                    byte[] decryptedBlock = teaDecrypt(encryptedBlock, key);
+
+                    // XOR с предыдущим блоком (или IV для первого блока)
+                    for (int j = 0; j < blockSize; j++) {
+                        if (i == 0) {
+                            outputBytes[i + j] = (byte) (decryptedBlock[j] ^ iv[j]);
+                        } else {
+                            outputBytes[i + j] = (byte) (decryptedBlock[j] ^ inputBytes[i - blockSize + j]);
+                        }
+                    }
+                }
+
+                // Записываем дешифрованные данные в новый файл
+                outputStream.write(outputBytes);
+
+                System.out.println("Дешифрование завершено.");
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+
+
+
+    private static byte[] teaDecrypt(byte[] message, int[] key) {
+        int[] v = new int[2];
+        v[0] = ((message[0] << 24) | ((message[1] & 0xFF) << 16) | ((message[2] & 0xFF) << 8) | (message[3] & 0xFF));
+        v[1] = ((message[4] << 24) | ((message[5] & 0xFF) << 16) | ((message[6] & 0xFF) << 8) | (message[7] & 0xFF));
+        int sum = DELTA * NUM_ROUNDS;
+
+        for (int i = 0; i < NUM_ROUNDS; i++) {
+            v[1] -= ((v[0] << 4) + key[2]) ^ (v[0] + sum) ^ ((v[0] >>> 5) + key[3]);
+            v[0] -= ((v[1] << 4) + key[0]) ^ (v[1] + sum) ^ ((v[1] >>> 5) + key[1]);
+            sum -= DELTA;
+        }
+
+        byte[] result = new byte[BLOCK_SIZE];
+        result[0] = (byte) (v[0] >>> 24);
+        result[1] = (byte) (v[0] >>> 16);
+        result[2] = (byte) (v[0] >>> 8);
+        result[3] = (byte) v[0];
+        result[4] = (byte) (v[1] >>> 24);
+        result[5] = (byte) (v[1] >>> 16);
+        result[6] = (byte) (v[1] >>> 8);
+        result[7] = (byte) v[1];
+        return result;
     }
 
     private static void generateKey(String keyFileName) throws IOException {
@@ -133,12 +154,11 @@ public class Encryption {
             outputStream.write(iv);
         }
     }
-
     private static int[] readKey(String keyFileName) throws IOException {
         try (FileInputStream inputStream = new FileInputStream(keyFileName)) {
             byte[] keyBytes = inputStream.readAllBytes();
             if (keyBytes.length % 4 != 0) {
-                throw new IllegalArgumentException("Invalid key length");
+                throw new IllegalArgumentException("Недопустимая длина ключа");
             }
             int[] key = new int[keyBytes.length / 4];
             for (int i = 0; i < keyBytes.length / 4; i++) {
@@ -166,8 +186,8 @@ public class Encryption {
 
         for (int i = 0; i < NUM_ROUNDS; i++) {
             sum += DELTA;
-            v[0] += ((v[1] << 4) + key[0]) ^ (v[1] + sum) ^ ((v[1] >> 5) + key[1]);
-            v[1] += ((v[0] << 4) + key[2]) ^ (v[0] + sum) ^ ((v[0] >> 5) + key[3]);
+            v[0] += ((v[1] << 4) + key[0]) ^ (v[1] + sum) ^ ((v[1] >>> 5) + key[1]);
+            v[1] += ((v[0] << 4) + key[2]) ^ (v[0] + sum) ^ ((v[0] >>> 5) + key[3]);
         }
 
         byte[] result = new byte[BLOCK_SIZE];
@@ -185,9 +205,6 @@ public class Encryption {
     private static byte[] encryptBlock(byte[] message, String keyFileName) throws IOException {
         int[] key = readKey(keyFileName);
         return teaEncrypt(message, key);
-
     }
 }
-
-
 

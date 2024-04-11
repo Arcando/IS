@@ -1,4 +1,4 @@
-package lab2v2;
+package lab2;
 
 import java.io.*;
 import java.security.SecureRandom;

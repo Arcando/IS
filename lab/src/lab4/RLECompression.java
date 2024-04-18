@@ -3,11 +3,8 @@ package lab4;
 import java.io.*;
 import java.util.Scanner;
 
-import java.io.*;
-import java.util.Scanner;
-
 public class RLECompression {
-    private static final int MAX_REPEAT_COUNT = 127; // Максимальное количество повторов одного символа
+    private static final int MIN_REPEAT_COUNT = 3; // Минимальное количество повторов одного символа
 
     // Метод для архивации файла с использованием алгоритма RLE
     public static void compress(String inputFileName, String outputFileName) throws IOException {
@@ -15,15 +12,15 @@ public class RLECompression {
         try (DataInputStream inputStream = new DataInputStream(new FileInputStream(inputFileName));
              DataOutputStream outputStream = new DataOutputStream(new FileOutputStream(outputFileName))) {
             int prevByte = -1; // Предыдущий считанный байт
-            int count = 0; // Счетчик повторений символов
+            int count = 1; // Счетчик повторений символов
 
             // Читаем входной файл побайтно и выполняем архивацию
             while (true) {
                 int currentByte = inputStream.read();
                 if (currentByte == -1) break; // Проверка на конец файла
 
-                // Если текущий байт совпадает с предыдущим и счетчик не превышает максимальное количество повторов
-                if (currentByte == prevByte && count < MAX_REPEAT_COUNT) {
+                // Если текущий байт совпадает с предыдущим
+                if (currentByte == prevByte) {
                     count++; // Увеличиваем счетчик повторений
                 } else {
                     writeCount(outputStream, prevByte, count); // Записываем данные в выходной файл
@@ -32,48 +29,47 @@ public class RLECompression {
                 }
             }
 
-            // Запись последнего фрагмента данных, если он не повторяется
+            // Запись последнего фрагмента данных
             writeCount(outputStream, prevByte, count);
         }
     }
 
     // Метод для записи данных в выходной файл
     private static void writeCount(DataOutputStream outputStream, int value, int count) throws IOException {
-        if (count == 1) { // Если символ не повторяется
-            outputStream.write(0); // Записываем ноль для обозначения отсутствия повторений
-            outputStream.write(value); // Записываем символ
-        } else if (count >= 2 && count <= MAX_REPEAT_COUNT) { // Если символ повторяется
+        if (count >= MIN_REPEAT_COUNT) { // Если символ повторяется 3 и более раз
+            outputStream.write(0); // Записываем ноль для обозначения повторяющейся последовательности
             outputStream.write(count); // Записываем количество повторений
             outputStream.write(value); // Записываем символ
+        } else { // Если символ повторяется менее 3 раз
+            for (int i = 0; i < count; i++) {
+                outputStream.write(1); // Записываем единицу для обозначения отдельного символа
+                outputStream.write(value); // Записываем символ
+            }
         }
     }
 
     // Метод для разархивации файла
     public static void decompress(String inputFileName) throws IOException {
         // Создаем имя выходного файла на основе имени входного файла
-        String outputFileName = inputFileName.replace(".txt.arh", "(1).txt");
+        String outputFileName = inputFileName.replace(".arh", "(1).txt");
 
         // Открываем входной поток данных для чтения архивированного файла и выходной поток данных для записи разархивированного файла
         try (DataInputStream inputStream = new DataInputStream(new FileInputStream(inputFileName));
              BufferedWriter writer = new BufferedWriter(new FileWriter(outputFileName))) {
             // Читаем данные из архивированного файла и производим их разархивацию
             while (true) {
-                int count = inputStream.read(); // Читаем количество повторений или отсутствие повторений
-                if (count == -1) break; // Проверка на конец файла
+                int flag = inputStream.read(); // Читаем флаг (0 для повторяющейся последовательности, 1 для отдельного символа)
+                if (flag == -1) break; // Проверка на конец файла
 
-                if (count == 0) { // Если символ не повторяется
+                if (flag == 0) { // Если символ повторяется
+                    int count = inputStream.read(); // Читаем количество повторений
+                    int value = inputStream.read(); // Читаем символ
+                    for (int i = 0; i < count; i++) {
+                        writer.write((char) value); // Записываем символ в выходной файл
+                    }
+                } else { // Если символ не повторяется
                     int value = inputStream.read(); // Читаем символ
                     writer.write((char) value); // Записываем символ в выходной файл
-                } else if (count < 0) { // Если символ повторяется
-                    int value = inputStream.read(); // Читаем символ
-                    while (count++ < 0) { // Повторяем запись символа нужное количество раз
-                        writer.write((char) value); // Записываем символ в выходной файл
-                    }
-                } else { // Если символ повторяется более 127 раз
-                    int value = inputStream.read(); // Читаем символ
-                    while (count-- > 0) { // Повторяем запись символа нужное количество раз
-                        writer.write((char) value); // Записываем символ в выходной файл
-                    }
                 }
             }
         }
@@ -101,11 +97,6 @@ public class RLECompression {
         } else {
             System.out.println("Некорректная операция. Используйте -c для архивации и -d для разархивации.");
         }
-
-        // Закрываем сканнер
-        scanner.close();
     }
 }
-
-
 

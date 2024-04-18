@@ -178,11 +178,11 @@ public class TEAEncryption {
             // Дешифрование файла
             decryptFile(messageFileName + ".enc", keyFileName);
             System.out.println("Дешифрование завершено.");
-        }
-        else {
+        } else {
             // Некорректный режим работы
             throw new IOException("Некорректный режим работы.");
         }
     }
 }
+
 

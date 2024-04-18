@@ -1,6 +1,4 @@
 package lab4;
-import java.io.*;
-import java.util.*;
 
 import java.io.*;
 import java.util.*;

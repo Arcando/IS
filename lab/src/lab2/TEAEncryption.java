@@ -148,9 +148,6 @@ public class TEAEncryption {
         if (!inputFile.exists() || !inputFile.isFile()) {
             throw new FileNotFoundException("Файл не найден: " + inputFileName);
         }
-        if (inputFile.length() < MIN_FILE_SIZE || inputFile.length() % BLOCK_SIZE == 0) {
-            throw new IllegalArgumentException("Размер файла должен быть не менее 4 Мбайт и не кратен длине блока 8 байт");
-        }
 
         int[] key = readKey(keyFileName);
         byte[] iv = readIV(ivFileName);
@@ -160,11 +157,19 @@ public class TEAEncryption {
             byte[] inputBytes = new byte[BLOCK_SIZE];
             int bytesRead;
             while ((bytesRead = inputStream.read(inputBytes)) != -1) {
+                // Проверяем, является ли блок последним и его размер равным BLOCK_SIZE
+                boolean isLastBlock = bytesRead < BLOCK_SIZE;
+                if (isLastBlock) {
+                    byte[] paddedBytes = new byte[BLOCK_SIZE];
+                    System.arraycopy(inputBytes, 0, paddedBytes, 0, bytesRead);
+                    inputBytes = paddedBytes;
+                }
                 byte[] encryptedBytes = teaEncrypt(inputBytes, key, iv);
                 outputStream.write(encryptedBytes);
             }
         }
     }
+
 
     /**
      * Чтение вектора инициализации из файла
@@ -238,9 +243,30 @@ public class TEAEncryption {
             int bytesRead;
             while ((bytesRead = inputStream.read(inputBytes)) != -1) {
                 byte[] decryptedBytes = teaDecrypt(inputBytes, key, iv);
+                // Если это последний блок, убираем дополненные символы
+                if (inputStream.available() == 0) {
+                    decryptedBytes = removePadding(decryptedBytes);
+                }
                 outputStream.write(decryptedBytes);
             }
         }
+    }
+
+    // Метод для удаления дополненных символов
+    private static byte[] removePadding(byte[] decryptedBytes) {
+        int paddingCount = 0;
+        // Подсчет количества дополненных символов
+        for (int i = decryptedBytes.length - 1; i >= 0; i--) {
+            if (decryptedBytes[i] == 0) {
+                paddingCount++;
+            } else {
+                break;
+            }
+        }
+        // Создание нового массива без дополненных символов
+        byte[] result = new byte[decryptedBytes.length - paddingCount];
+        System.arraycopy(decryptedBytes, 0, result, 0, result.length);
+        return result;
     }
 
 

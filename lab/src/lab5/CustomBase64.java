@@ -101,11 +101,11 @@ public class CustomBase64 {
         System.out.println("Введите операцию: -e (кодирование), -d (декодирование)");
         String operation = scanner.nextLine();
         System.out.println("Введите имя файла:");
-        String inputFileName = scanner.nextLine();
+        String inputFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР5\\"+scanner.nextLine();
 
         // Выполняем выбранную операцию
         if (operation.equals("-e")) {
-            encode(inputFileName, inputFileName + ".encoded");
+            encode(inputFileName, inputFileName + ".enc");
         } else if (operation.equals("-d")) {
             decode(inputFileName, inputFileName.replace(".txt.encoded", "(1).txt"));
         } else {

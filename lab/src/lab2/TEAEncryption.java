@@ -5,105 +5,29 @@ import java.security.SecureRandom;
 import java.util.Scanner;
 
 public class TEAEncryption {
-    // Константа DELTA для TEA
     private static final int DELTA = 0x9e3779b9;
-    // Количество раундов для TEA
     private static final int NUM_ROUNDS = 32;
-    // Размер блока данных для TEA (в байтах)
-    private static final int BLOCK_SIZE = 8; // 64 бита
-    // Минимальный размер файла (в байтах)
-    private static final long MIN_FILE_SIZE = 4 * 1024 * 1025; // 4 Мбайта
+    private static final int BLOCK_SIZE = 8; // 64 bits
+    private static final long MIN_FILE_SIZE = 4 * 1024 * 1025; // 4 MB
 
-    /**
-     * Генерация ключа шифрования и запись в файл
-     *
-     * @param keyFileName Имя файла для хранения ключа
-     * @throws IOException Ошибка ввода/вывода
-     */
     private static void generateKey(String keyFileName) throws IOException {
         try (FileOutputStream outputStream = new FileOutputStream(keyFileName)) {
             SecureRandom secureRandom = new SecureRandom();
-            // Генерация ключа длиной 16 байт
             byte[] key = new byte[BLOCK_SIZE * 2];
             secureRandom.nextBytes(key);
             outputStream.write(key);
         }
     }
 
-    /**
-     * Генерация вектора инициализации и запись в файл
-     *
-     * @param ivFileName Имя файла для хранения вектора инициализации
-     * @throws IOException Ошибка ввода/вывода
-     */
     private static void generateIV(String ivFileName) throws IOException {
         try (FileOutputStream outputStream = new FileOutputStream(ivFileName)) {
             SecureRandom secureRandom = new SecureRandom();
-            // Генерация вектора инициализации длиной 8 байт
             byte[] iv = new byte[BLOCK_SIZE];
             secureRandom.nextBytes(iv);
             outputStream.write(iv);
         }
     }
 
-    /**
-     * Заполнение файла телом шифрования
-     *
-     * @param fileName Имя файла
-     * @throws IOException Ошибка ввода/вывода
-     */
-    private static void fillFileWithEncryptionData(String fileName) throws IOException {
-        try (FileOutputStream outputStream = new FileOutputStream(fileName)) {
-            byte[] buffer = "KirillMamonov".getBytes();
-            long remainingBytes = MIN_FILE_SIZE;
-            while (remainingBytes > 0) {
-                int bytesToWrite = (int) Math.min(buffer.length, remainingBytes);
-                outputStream.write(buffer, 0, bytesToWrite);
-                remainingBytes -= bytesToWrite;
-            }
-            // Дополнение файла, если его размер не кратен длине блока 8 байт
-            if (new File(fileName).length() % BLOCK_SIZE != 0) {
-                int remainingBytesToBlock = BLOCK_SIZE - (int) (new File(fileName).length() % BLOCK_SIZE);
-                outputStream.write(new byte[remainingBytesToBlock]);
-            }
-        }
-    }
-
-    /**
-     * Чтение ключа из файла
-     *
-     * @param keyFileName Имя файла с ключом
-     * @return Массив int, содержащий ключ
-     * @throws IOException Ошибка ввода/вывода
-     */
-    private static int[] readKey(String keyFileName) throws IOException {
-        try (FileInputStream inputStream = new FileInputStream(keyFileName)) {
-            byte[] keyBytes = inputStream.readAllBytes();
-            // Проверка длины ключа
-            if (keyBytes.length % 4 != 0) {
-                throw new IllegalArgumentException("Некорректная длина ключа");
-            }
-            int[] key = new int[keyBytes.length / 4];
-            // Преобразование массива байт в массив int
-            for (int i = 0; i < keyBytes.length / 4; i++) {
-                int value = 0;
-                for (int j = 0; j < 4; j++) {
-                    value |= (keyBytes[i * 4 + j] & 0xFF) << (24 - 8 * j);
-                }
-                key[i] = value;
-            }
-            return key;
-        }
-    }
-
-    /**
-     * Шифрование данных методом TEA с использованием вектора инициализации
-     *
-     * @param message Исходный блок данных
-     * @param key     Ключ шифрования
-     * @param iv      Вектор инициализации
-     * @return Зашифрованный блок данных
-     */
     private static byte[] teaEncrypt(byte[] message, int[] key, byte[] iv) {
         int[] v = new int[2];
         v[0] = ((message[0] << 24) | ((message[1] & 0xFF) << 16) | ((message[2] & 0xFF) << 8) | (message[3] & 0xFF));
@@ -126,7 +50,6 @@ public class TEAEncryption {
         result[6] = (byte) (v[1] >>> 8);
         result[7] = (byte) v[1];
 
-        // Применение вектора инициализации
         for (int i = 0; i < BLOCK_SIZE; i++) {
             result[i] ^= iv[i];
         }
@@ -134,15 +57,6 @@ public class TEAEncryption {
         return result;
     }
 
-    /**
-     * Шифрование файла
-     *
-     * @param inputFileName  Входной файл для шифрования
-     * @param outputFileName Выходной файл с зашифрованными данными
-     * @param keyFileName    Файл с ключом шифрования
-     * @param ivFileName     Файл с вектором инициализации
-     * @throws IOException Ошибка ввода/вывода
-     */
     private static void encryptFile(String inputFileName, String outputFileName, String keyFileName, String ivFileName) throws IOException {
         File inputFile = new File(inputFileName);
         if (!inputFile.exists() || !inputFile.isFile()) {
@@ -157,11 +71,12 @@ public class TEAEncryption {
             byte[] inputBytes = new byte[BLOCK_SIZE];
             int bytesRead;
             while ((bytesRead = inputStream.read(inputBytes)) != -1) {
-                // Проверяем, является ли блок последним и его размер равным BLOCK_SIZE
-                boolean isLastBlock = bytesRead < BLOCK_SIZE;
-                if (isLastBlock) {
+                if (bytesRead < BLOCK_SIZE) {
                     byte[] paddedBytes = new byte[BLOCK_SIZE];
                     System.arraycopy(inputBytes, 0, paddedBytes, 0, bytesRead);
+                    for (int i = bytesRead; i < BLOCK_SIZE; i++) {
+                        paddedBytes[i] = 1;
+                    }
                     inputBytes = paddedBytes;
                 }
                 byte[] encryptedBytes = teaEncrypt(inputBytes, key, iv);
@@ -170,30 +85,7 @@ public class TEAEncryption {
         }
     }
 
-
-    /**
-     * Чтение вектора инициализации из файла
-     *
-     * @param ivFileName Имя файла с вектором инициализации
-     * @return Массив байт, содержащий вектор инициализации
-     * @throws IOException Ошибка ввода/вывода
-     */
-    private static byte[] readIV(String ivFileName) throws IOException {
-        try (FileInputStream inputStream = new FileInputStream(ivFileName)) {
-            return inputStream.readAllBytes();
-        }
-    }
-
-    /**
-     * Дешифрование данных методом TEA с использованием вектора инициализации
-     *
-     * @param cipher Зашифрованный блок данных
-     * @param key    Ключ шифрования
-     * @param iv     Вектор инициализации
-     * @return Расшифрованный блок данных
-     */
     private static byte[] teaDecrypt(byte[] cipher, int[] key, byte[] iv) {
-        // Применение вектора инициализации
         for (int i = 0; i < BLOCK_SIZE; i++) {
             cipher[i] ^= iv[i];
         }
@@ -221,14 +113,6 @@ public class TEAEncryption {
         return result;
     }
 
-    /**
-     * Дешифрование файла
-     *
-     * @param inputFileName Имя зашифрованного файла
-     * @param keyFileName   Файл с ключом шифрования
-     * @param ivFileName    Файл с вектором инициализации
-     * @throws IOException Ошибка ввода/вывода
-     */
     private static void decryptFile(String inputFileName, String keyFileName, String ivFileName) throws IOException {
         File inputFile = new File(inputFileName);
         if (!inputFile.exists() || !inputFile.isFile()) {
@@ -243,7 +127,6 @@ public class TEAEncryption {
             int bytesRead;
             while ((bytesRead = inputStream.read(inputBytes)) != -1) {
                 byte[] decryptedBytes = teaDecrypt(inputBytes, key, iv);
-                // Если это последний блок, убираем дополненные символы
                 if (inputStream.available() == 0) {
                     decryptedBytes = removePadding(decryptedBytes);
                 }
@@ -252,55 +135,67 @@ public class TEAEncryption {
         }
     }
 
-    // Метод для удаления дополненных символов
     private static byte[] removePadding(byte[] decryptedBytes) {
         int paddingCount = 0;
-        // Подсчет количества дополненных символов
         for (int i = decryptedBytes.length - 1; i >= 0; i--) {
-            if (decryptedBytes[i] == 0) {
+            if (decryptedBytes[i] == 1) {
                 paddingCount++;
             } else {
                 break;
             }
         }
-        // Создание нового массива без дополненных символов
         byte[] result = new byte[decryptedBytes.length - paddingCount];
         System.arraycopy(decryptedBytes, 0, result, 0, result.length);
         return result;
     }
 
+    private static int[] readKey(String keyFileName) throws IOException {
+        try (FileInputStream inputStream = new FileInputStream(keyFileName)) {
+            byte[] keyBytes = inputStream.readAllBytes();
+            if (keyBytes.length % 4 != 0) {
+                throw new IllegalArgumentException("Невалидная длина ключа");
+            }
+            int[] key = new int[keyBytes.length / 4];
+            for (int i = 0; i < keyBytes.length / 4; i++) {
+                int value = 0;
+                for (int j = 0; j < 4; j++) {
+                    value |= (keyBytes[i * 4 + j] & 0xFF) << (24 - 8 * j);
+                }
+                key[i] = value;
+            }
+            return key;
+        }
+    }
 
-    /**
-     * Основной метод программы
-     */
+    private static byte[] readIV(String ivFileName) throws IOException {
+        try (FileInputStream inputStream = new FileInputStream(ivFileName)) {
+            return inputStream.readAllBytes();
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         Scanner scanner = new Scanner(System.in);
 
-        System.out.println("Введите мод: -e - шифрование, -d - дешифрование");
+        System.out.println("Введите тип действия: -e - шифрование, -d - дешифрование");
         String mode = scanner.nextLine();
-        System.out.println("Введите название файла:");
+        System.out.println("Введите имя файла:");
 
         String messageFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\" + scanner.nextLine();
         String keyFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\key.txt";
         String ivFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР2\\iv.txt";
 
         if (mode.equals("-e")) {
-            // Генерация ключа шифрования
             generateKey(keyFileName);
-            // Генерация вектора инициализации
             generateIV(ivFileName);
-            // Шифрование файла
             encryptFile(messageFileName, messageFileName + ".enc", keyFileName, ivFileName);
-            System.out.println("Шифрование завершено.");
+            System.out.println("Шифрование завершено");
         } else if (mode.equals("-d")) {
-            // Дешифрование файла
             decryptFile(messageFileName, keyFileName, ivFileName);
-            System.out.println("Дешифрование завершено.");
+            System.out.println("Дешифрование завершено");
         } else {
-            System.out.println("Некорректный режим работы.");
+            System.out.println("Некорректное действие");
         }
 
         scanner.close();
     }
 }
-

@@ -1,135 +1,256 @@
 package lab3;
 
-import javax.crypto.Cipher;
-import javax.crypto.CipherInputStream;
-import javax.crypto.CipherOutputStream;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.Random;
+import java.util.Scanner;
+
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import java.util.Random;
 import java.util.Scanner;
 
 public class CustomCryptoSystem {
-    private static final int SESSION_KEY_SIZE = 16; // Размер ключа сеанса в байтах
+
+    private static final int NUM_ROUNDS = 32;
+    private static final int BLOCK_SIZE = 8; // 64 bits
+
+    // Генерация случайного вектора инициализации
+    private static void generateIV(int[] iv) {
+        Random random = new Random();
+        for (int i = 0; i < 2; ++i) {
+            iv[i] = random.nextInt();
+        }
+    }
+
+    // Функция шифрования блока данных по алгоритму TEA
+    private static void teaEncrypt(int[] v, int[] k) {
+        int v0 = v[0], v1 = v[1], sum = 0;
+        int delta = 0x9e3779b9;
+        int k0 = k[0], k1 = k[1], k2 = k[2], k3 = k[3];
+
+        for (int i = 0; i < NUM_ROUNDS; i++) {
+            sum += delta;
+            v0 += ((v1 << 4) + k0) ^ (v1 + sum) ^ ((v1 >>> 5) + k1);
+            v1 += ((v0 << 4) + k2) ^ (v0 + sum) ^ ((v0 >>> 5) + k3);
+        }
+
+        v[0] = v0;
+        v[1] = v1;
+    }
+
+    // Функция дешифрования блока данных по алгоритму TEA
+    private static void teaDecrypt(int[] v, int[] k) {
+        int v0 = v[0], v1 = v[1], sum = 0xC6EF3720;
+        int delta = 0x9e3779b9;
+        int k0 = k[0], k1 = k[1], k2 = k[2], k3 = k[3];
+
+        for (int i = 0; i < NUM_ROUNDS; i++) {
+            v1 -= ((v0 << 4) + k2) ^ (v0 + sum) ^ ((v0 >>> 5) + k3);
+            v0 -= ((v1 << 4) + k0) ^ (v1 + sum) ^ ((v1 >>> 5) + k1);
+            sum -= delta;
+        }
+
+        v[0] = v0;
+        v[1] = v1;
+    }
+
+    // Генерация и сохранение случайного ключа
+    private static void generateAndSaveKey(int[] key) {
+        Random random = new Random();
+        for (int i = 0; i < 4; ++i) {
+            key[i] = random.nextInt();
+        }
+    }
+
+    // Шифрование ключа с использованием хеша пароля
+    private static void encryptKey(int[] originalKey, int[] passwordHash, int[] encryptedKey) {
+        for (int i = 0; i < 4; ++i) {
+            encryptedKey[i] = originalKey[i] ^ passwordHash[i];
+        }
+    }
+
+    // Дешифрование ключа с использованием хеша пароля
+    private static void decryptKey(int[] encryptedKey, int[] passwordHash, int[] decryptedKey) {
+        for (int i = 0; i < 4; ++i) {
+            decryptedKey[i] = encryptedKey[i] ^ passwordHash[i];
+        }
+    }
+
+    // XOR операция массива данных с ключом
+    private static void xorArray(byte[] data, int[] key) {
+        for (int i = 0; i < data.length; i++) {
+            data[i] ^= (byte) ((key[i / 4] >> ((i % 4) * 8)) & 0xFF);
+        }
+    }
+
+    // Операция Output Feedback (OFB)
+    private static void ofb(byte[] data, int[] key, int[] iv) {
+        byte[] state = new byte[BLOCK_SIZE];
+        for (int i = 0; i < 2; i++) {
+            state[i] = (byte) (iv[i] & 0xFF);
+        }
+
+        for (int i = 0; i < data.length; i += BLOCK_SIZE) {
+            xorArray(state, key);
+            for (int j = 0; j < BLOCK_SIZE; j++) {
+                if (i + j < data.length) {
+                    data[i + j] ^= state[j];
+                }
+            }
+        }
+    }
+
+    // Хеширование пароля
+    private static void hashPassword(String password, int[] hash) throws NoSuchAlgorithmException {
+        MessageDigest md = MessageDigest.getInstance("MD5");
+        byte[] passwordBytes = password.getBytes();
+        byte[] digest = md.digest(passwordBytes);
+
+        for (int i = 0; i < 4; i++) {
+            hash[i] = ByteBuffer.wrap(Arrays.copyOfRange(digest, i * 4, (i + 1) * 4)).getInt();
+        }
+    }
+
+    // Функция шифрования файла
+    private static void encryptFile(String inputFile, String outputFile, int[] originalKey, int[] iv) throws Exception {
+        FileInputStream inputStream = new FileInputStream(inputFile);
+        byte[] inputBytes = inputStream.readAllBytes();
+        inputStream.close();
+
+        for (int i = 0; i < inputBytes.length; i += BLOCK_SIZE) {
+            if (i + BLOCK_SIZE <= inputBytes.length) {
+                int[] block = new int[2];
+                block[0] = (inputBytes[i] << 24) | ((inputBytes[i + 1] & 0xFF) << 16) | ((inputBytes[i + 2] & 0xFF) << 8) | (inputBytes[i + 3] & 0xFF);
+                block[1] = (inputBytes[i + 4] << 24) | ((inputBytes[i + 5] & 0xFF) << 16) | ((inputBytes[i + 6] & 0xFF) << 8) | (inputBytes[i + 7] & 0xFF);
+                teaEncrypt(block, originalKey);
+                inputBytes[i] = (byte) (block[0] >>> 24);
+                inputBytes[i + 1] = (byte) (block[0] >>> 16);
+                inputBytes[i + 2] = (byte) (block[0] >>> 8);
+                inputBytes[i + 3] = (byte) block[0];
+                inputBytes[i + 4] = (byte) (block[1] >>> 24);
+                inputBytes[i + 5] = (byte) (block[1] >>> 16);
+                inputBytes[i + 6] = (byte) (block[1] >>> 8);
+                inputBytes[i + 7] = (byte) block[1];
+            } else {
+                byte[] block = Arrays.copyOfRange(inputBytes, i, inputBytes.length);
+                ofb(block, originalKey, iv);
+                System.arraycopy(block, 0, inputBytes, i, block.length);
+                break;
+            }
+        }
+
+        FileOutputStream outputStream = new FileOutputStream(outputFile);
+        outputStream.write(inputBytes);
+        outputStream.close();
+    }
+
+    // Функция дешифрования файла
+    private static void decryptFile(String inputFile, String outputFile, int[] passwordDecryptedKey, int[] iv) throws Exception {
+        FileInputStream inputStream = new FileInputStream(inputFile);
+        byte[] inputBytes = inputStream.readAllBytes();
+        inputStream.close();
+
+        int keySize = 4 * Integer.BYTES;
+        if (inputBytes.length < keySize) {
+            System.out.println("File does not contain correctly encrypted data.");
+            return;
+        }
+
+        byte[] dataBytes = Arrays.copyOf(inputBytes, inputBytes.length - keySize);
+
+        for (int i = 0; i < dataBytes.length; i += BLOCK_SIZE) {
+            int[] block = new int[2];
+            block[0] = (dataBytes[i] << 24) | ((dataBytes[i + 1] & 0xFF) << 16) | ((dataBytes[i + 2] & 0xFF) << 8) | (dataBytes[i + 3] & 0xFF);
+            block[1] = (dataBytes[i + 4] << 24) | ((dataBytes[i + 5] & 0xFF) << 16) | ((dataBytes[i + 6] & 0xFF) << 8) | (dataBytes[i + 7] & 0xFF);
+
+            if (i + BLOCK_SIZE <= dataBytes.length) {
+                teaDecrypt(block, passwordDecryptedKey);
+                dataBytes[i] = (byte) (block[0] >>> 24);
+                dataBytes[i + 1] = (byte) (block[0] >>> 16);
+                dataBytes[i + 2] = (byte) (block[0] >>> 8);
+                dataBytes[i + 3] = (byte) block[0];
+                dataBytes[i + 4] = (byte) (block[1] >>> 24);
+                dataBytes[i + 5] = (byte) (block[1] >>> 16);
+                dataBytes[i + 6] = (byte) (block[1] >>> 8);
+                dataBytes[i + 7] = (byte) block[1];
+            } else {
+                byte[] blockBytes = Arrays.copyOfRange(dataBytes, i, dataBytes.length);
+                ofb(blockBytes, passwordDecryptedKey, iv);
+                System.arraycopy(blockBytes, 0, dataBytes, i, blockBytes.length);
+                break;
+            }
+        }
+
+        FileOutputStream outputStream = new FileOutputStream(outputFile);
+        outputStream.write(dataBytes);
+        outputStream.close();
+    }
 
     public static void main(String[] args) throws Exception {
         Scanner scanner = new Scanner(System.in);
+        System.out.println("Enter mode: -e for encryption, -d for decryption");
+        String mode = scanner.nextLine();
+        System.out.println("Enter file name:");
+        String fileName = scanner.nextLine();
+        String inputFile = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР3\\" + fileName;
 
-        // Шаг 1: Генерация ключа сеанса
-        byte[] sessionKey = generateSessionKey();
-        System.out.println("Сгенерирован ключ сеанса.");
+        int[] iv = new int[2];
+        generateIV(iv);
 
-//        // Ввод пароля пользователя без вывода на экран
-//        Console console = System.console();
-//        if (console == null) {
-//            System.out.println("Консоль не доступна. Пароль будет виден на экране.");
-//        }
-        System.out.println("Введите пароль: ");
-        String password = scanner.nextLine();
+        int[] originalKey = new int[4];
+        generateAndSaveKey(originalKey);
 
-        // Шаг 5: Создание ключа шифрования на основе пароля пользователя
-        byte[] encryptionKey = generateEncryptionKey(password);
+        if (mode.equals("-e")) {
+            System.out.println("Enter password:");
+            String password = scanner.nextLine();
+            int[] passwordHash = new int[4];
+            hashPassword(password, passwordHash);
 
-        // Шаг 3: Шифрование файла с использованием ключа сеанса
-        String inputFileName = "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР5\\lab5.txt";
-        String encryptedFileName = encryptFile(inputFileName, sessionKey);
+            int[] encryptedKey = new int[4];
+            encryptKey(originalKey, passwordHash, encryptedKey);
 
-        // Шаг 7: Шифрование ключа сеанса и добавление его в зашифрованный файл
-        encryptSessionKey(encryptedFileName, sessionKey, encryptionKey);
+            encryptFile(inputFile, "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР3\\lab3.txt.enc", originalKey, iv);
 
-        // Дешифрование файла
-        decryptFile(encryptedFileName, encryptionKey);
-
-        System.out.println("Программа завершена.");
-    }
-
-    // Генерация ключа сеанса
-    private static byte[] generateSessionKey() throws NoSuchAlgorithmException {
-        SecureRandom secureRandom = new SecureRandom();
-        byte[] key = new byte[SESSION_KEY_SIZE];
-        secureRandom.nextBytes(key);
-        return key;
-    }
-
-    // Создание ключа шифрования на основе пароля пользователя
-    private static byte[] generateEncryptionKey(String password) throws NoSuchAlgorithmException {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        return digest.digest(password.getBytes());
-    }
-
-    // Шифрование файла с использованием ключа сеанса
-    private static String encryptFile(String inputFileName, byte[] sessionKey) throws Exception {
-        String outputFileName = inputFileName + ".enc";
-        try (FileInputStream inputStream = new FileInputStream(inputFileName);
-             FileOutputStream outputStream = new FileOutputStream(outputFileName)) {
-            Cipher cipher = Cipher.getInstance("AES");
-            SecretKeySpec secretKeySpec = new SecretKeySpec(sessionKey, "AES");
-            cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec);
-            CipherOutputStream cipherOutputStream = new CipherOutputStream(outputStream, cipher);
-
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                cipherOutputStream.write(buffer, 0, bytesRead);
+            FileOutputStream outputStream = new FileOutputStream("C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР3\\lab3_key.enc");
+            for (int i = 0; i < encryptedKey.length; i++) {
+                outputStream.write(ByteBuffer.allocate(4).putInt(encryptedKey[i]).array());
             }
-            cipherOutputStream.close();
-        }
-        return outputFileName;
-    }
+            outputStream.close();
 
-    // Шифрование ключа сеанса и добавление его в зашифрованный файл
-    private static void encryptSessionKey(String encryptedFileName, byte[] sessionKey, byte[] encryptionKey) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES");
-        SecretKeySpec secretKeySpec = new SecretKeySpec(encryptionKey, "AES");
-        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec);
+            System.out.println("File encrypted successfully.");
+        } else if (mode.equals("-d")) {
+            System.out.println("Enter password:");
+            String password = scanner.nextLine();
+            int[] passwordHash = new int[4];
+            hashPassword(password, passwordHash);
 
-        try (FileOutputStream outputStream = new FileOutputStream(encryptedFileName, true)) {
-            byte[] encryptedSessionKey = cipher.doFinal(sessionKey);
-            outputStream.write(encryptedSessionKey);
-        }
-    }
-
-    // Дешифрование файла
-    private static void decryptFile(String encryptedFileName, byte[] encryptionKey) throws Exception {
-        // Считываем зашифрованный ключ сеанса
-        int sessionKeySize = SESSION_KEY_SIZE;
-        byte[] encryptedSessionKey = new byte[sessionKeySize];
-        try (RandomAccessFile file = new RandomAccessFile(encryptedFileName, "r")) {
-            long fileLength = file.length();
-            file.seek(fileLength - sessionKeySize);
-            file.read(encryptedSessionKey);
-        }
-
-        // Расшифровываем зашифрованный ключ сеанса
-        Cipher cipher = Cipher.getInstance("AES");
-        SecretKeySpec secretKeySpec = new SecretKeySpec(encryptionKey, "AES");
-        cipher.init(Cipher.DECRYPT_MODE, secretKeySpec);
-        byte[] sessionKey = cipher.doFinal(encryptedSessionKey);
-
-        // Проверяем, что sessionKey не пустой
-        if (sessionKey == null || sessionKey.length == 0) {
-            throw new IllegalArgumentException("Empty session key");
-        }
-
-        // Расшифровываем файл с использованием расшифрованного ключа сеанса
-        try (FileInputStream inputStream = new FileInputStream(encryptedFileName);
-             FileOutputStream outputStream = new FileOutputStream(encryptedFileName.replace(".enc", ""))) {
-            Cipher decryptCipher = Cipher.getInstance("AES");
-            SecretKeySpec sessionKeySpec = new SecretKeySpec(sessionKey, "AES");
-            decryptCipher.init(Cipher.DECRYPT_MODE, sessionKeySpec);
-            CipherInputStream cipherInputStream = new CipherInputStream(inputStream, decryptCipher);
-
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = cipherInputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, bytesRead);
+            int[] encryptedKey = new int[4];
+            FileInputStream keyStream = new FileInputStream("C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР3\\lab3_key.enc");
+            for (int i = 0; i < encryptedKey.length; i++) {
+                byte[] keyBytes = new byte[4];
+                keyStream.read(keyBytes);
+                encryptedKey[i] = ByteBuffer.wrap(keyBytes).getInt();
             }
-            cipherInputStream.close();
+            keyStream.close();
+
+            int[] passwordDecryptedKey = new int[4];
+            decryptKey(encryptedKey, passwordHash, passwordDecryptedKey);
+
+            decryptFile(inputFile, "C:\\Users\\ADMIN\\Desktop\\ИБ\\ЛР3\\lab3.txt.dec", passwordDecryptedKey, iv);
+
+            System.out.println("File decrypted successfully.");
+        } else {
+            System.out.println("Invalid mode.");
         }
+
+        scanner.close();
     }
-
-
 }
